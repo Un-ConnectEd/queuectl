@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
+import { enqueueJob as enqueue ,getJobs as listJobs } from '../src/job/job.js';
 
 
 const program = new Command();
@@ -16,8 +17,15 @@ program
   .description('Add a new job to the queue')
   .argument('<job>', 'Job JSON string')
   .action(async (job) => {
-    await enqueue(job);
+    try {
+      const jobData = JSON.parse(job);
+      const result = await enqueue(jobData);
+      console.log('Job added:', result);
+    } catch (err) {
+      console.error('Invalid job JSON:', err.message);
+    }
   });
+
 
 //
 // LIST JOBS
