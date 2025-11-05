@@ -13,7 +13,7 @@
   "packageManager": "pnpm@10.20.0",
   "dependencies": {
     "commander": "^14.0.2",
-    "sqlite3": "^5.1.7",
+    "sql.js": "^1.13.0",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
