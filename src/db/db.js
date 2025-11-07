@@ -8,12 +8,12 @@ const dbDir = path.join(__dirname, '../../db');
 
 if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
-  console.log('🗂 Created DB folder at', dbDir);
+  console.log('Created DB folder at', dbDir);
 }
 
 const DB_FILE = path.join(dbDir, 'queue.db');
 const TEMP_DB_FILE = path.join(dbDir, 'queue.db.tmp'); // For atomic saves
-console.log('📦 DB file path:', DB_FILE);
+console.log('DB file path:', DB_FILE);
 
 let dbPromise = null;
 
@@ -50,6 +50,10 @@ function getDb() {
           )`
         );
         db.run(
+          `CREATE INDEX idx_jobs_state_run_after
+           ON jobs (state, run_after)`
+        );
+        db.run(
           `CREATE TABLE config(
             key TEXT PRIMARY KEY,
             value TEXT
@@ -75,15 +79,17 @@ function getDb() {
  * and then renaming it.
  */
 export function saveDb(db) {
-  if (!db) return;
+  if (!db) return false; // Add a return value to see if the save is sucessful or not
   console.log('Saving DB to file (atomic)...');
   const data = db.export();
   try {
     fs.writeFileSync(TEMP_DB_FILE, Buffer.from(data));
     fs.renameSync(TEMP_DB_FILE, DB_FILE);
     console.log('Database save complete.');
+    return true; // Report success
   } catch (err) {
     console.error('FATAL: Failed to save DB atomically!', err);
+    return false; // Report failure
   }
 }
 
@@ -94,12 +100,7 @@ export async function getDbInstance() {
   return getDb();
 }
 
-/**
- * This function is ONLY for the CLI client.
- * The server should NEVER call this.
- */
+
 export async function closeAndSaveDb(db) {
-  // This function is a no-op in the new model,
-  // but we leave it so the old CLI doesn't break,
-  // even though the CLI shouldn't be using it.
+  
 }
