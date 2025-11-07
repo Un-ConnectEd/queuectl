@@ -167,6 +167,27 @@ dlqCmd
 //
 const configCmd = program.command('config').description('Manage server configuration');
 
+// Config schema and helper to give more info on help
+const CONFIG_SCHEMA = {
+  max_retries:       { type: 'integer', min: 0,    default: 10,    description: 'Maximum retry attempts for failed jobs' },
+  backoff_base:      { type: 'integer', min: 1,    default: 5,     description: 'Base multiplier for exponential backoff' },
+  backoff_factor_ms: { type: 'integer', min: 0,    default: 1000,  description: 'Initial delay (ms) for job retry backoff' },
+  tick_interval_ms:  { type: 'integer', min: 50,   default: 250,   description: 'Worker loop tick interval (min 50ms)' },
+  save_interval_ms:  { type: 'integer', min: 1000, default: 5000,  description: 'State save interval to disk (min 1s)' },
+};
+function printConfigSchema() {
+  console.log('\nAvailable configuration keys:\n');
+  console.table(
+    Object.entries(CONFIG_SCHEMA).map(([key, info]) => ({
+      Key: key,
+      Type: info.type,
+      Min: info.min,
+      Default: info.default,
+      Description: info.description || '',
+    }))
+  );
+}
+
 configCmd
   .command('list')
   .description('List all configuration keys and values')
@@ -191,6 +212,10 @@ configCmd
     } catch (err) {
       console.error('Error fetching config key:', err.response ? err.response.data : err.message);
     }
+  })
+  .addHelpText('after', () => {
+    printConfigSchema();
+    return '';
   });
 
 configCmd
@@ -208,6 +233,44 @@ configCmd
     } catch (err) {
       console.error('Error setting config:', err.response ? err.response.data : err.message);
     }
+  })
+  .addHelpText('after', () => {
+    printConfigSchema();
+    return '';
   });
+
+
+  //
+  // STATUS
+  //
+program.command('status').description('Show summary of all job states & active workers')
   
+
+  .action(async () => {
+    try {
+      const res = await axios.get(`${SERVER_URL}/status`);
+      const { jobSummary, workerSummary } = res.data;
+      
+      console.log('\n--- Job Summary ---');
+      console.table(jobSummary);
+      
+      console.log('\n--- Worker Summary ---');
+      // Format for better readability
+      const workerData = {
+        'Processing': workerSummary.processing,
+        'Idle (Ready)': workerSummary.idle,
+        'Live Workers': workerSummary.live,
+      };
+      console.table(workerData);
+
+    } catch (err) {
+      if (err.response) {
+        console.error('Error from server:', err.response.data);
+      } else if (err.code === 'ECONNREFUSED') {
+        console.error('Error: Could not connect to worker server.');
+      } else {
+        console.error('Error fetching status:', err.message);
+      }
+    }
+  });
 program.parse(process.argv);
