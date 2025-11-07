@@ -93,5 +93,73 @@ worker
     const { startWorkers } = await import('../src/worker/worker.js');
     await startWorkers(count); // This function will now run forever starts the server.
   });
+worker
+  .command('stop')
+  .description('Stop the worker server')
+  .action(async () => {
+    try {
+      console.log('Sending graceful shutdown signal to worker server...');
+      const res = await axios.post(`${SERVER_URL}/shutdown`);
+      console.log(`Server response: ${res.data.message}`);
+      
+    } catch (err) {
+      console.error('Error signaling shutdown:', err.response ? err.response.data.message : err.message);
+    }
+  });
+
+
+
+//
+// DLQ (list and retry)
+//
+const dlqCmd = program.command('dlq').description('Manage the Dead Letter Queue (dead jobs)');
+
+dlqCmd
+  .command('list')
+  .description('List all jobs in the DLQ')
+  .action(async () => {
+    try {
+      const res = await axios.get(`${SERVER_URL}/dlq`);
+      const jobs = res.data;
+      if (jobs && jobs.length > 0) {
+        console.table(jobs);
+      } else {
+        console.log('No jobs found in DLQ.');
+      }
+    } catch (err) {
+      console.error('Error listing DLQ:', err.response ? err.response.data : err.message);
+    }
+  });
+
+
+
+dlqCmd
+  .command('retry')
+  .description('Retry a specific job or all jobs from the DLQ')
+  .argument('[job-id]', 'The ID of the job to retry')
+  .option('-a, --all', 'Retry all jobs in the DLQ')
+  .action(async (jobId, options) => {
+    try {
+      if (options.all) {
+        // --- Option 1: User ran 'queuectl dlq retry --all' ---
+        console.log('Sending request to re-queue all DLQ jobs...');
+        const res = await axios.post(`${SERVER_URL}/dlq/retry-all`);
+        console.log(`Success: ${res.data.message}`);
+
+      } else if (jobId) {
+        // --- Option 2: User ran 'queuectl dlq retry <job-id>' ---
+        await axios.post(`${SERVER_URL}/dlq/retry/${jobId}`);
+        console.log(`Job ${jobId} sent to be re-queued.`);
+
+      } else {
+        // --- Option 3: User ran 'queuectl dlq retry' (no args) ---
+        console.error('Error: You must specify a job-id or use the --all flag.');
+        console.log('Example: queuectl dlq retry my-job-id');
+        console.log('   ...or: queuectl dlq retry --all');
+      }
+    } catch (err) {
+      console.error('Error retrying job(s):', err.response ? err.response.data : err.message);
+    }
+  });
 
 program.parse(process.argv);
