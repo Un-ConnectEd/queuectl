@@ -162,4 +162,52 @@ dlqCmd
     }
   });
 
+//
+// CONFIG (NEW)
+//
+const configCmd = program.command('config').description('Manage server configuration');
+
+configCmd
+  .command('list')
+  .description('List all configuration keys and values')
+  .action(async () => {
+    try {
+      const res = await axios.get(`${SERVER_URL}/config`);
+      console.log('Server Configuration:');
+      console.table(res.data);
+    } catch (err) {
+      console.error('Error fetching config:', err.response ? err.response.data : err.message);
+    }
+  });
+
+configCmd
+  .command('get')
+  .description('Get a single configuration value')
+  .argument('<key>', 'The config key to get')
+  .action(async (key) => {
+    try {
+      const res = await axios.get(`${SERVER_URL}/config/${key}`);
+      console.log(res.data);
+    } catch (err) {
+      console.error('Error fetching config key:', err.response ? err.response.data : err.message);
+    }
+  });
+
+configCmd
+  .command('set')
+  .description('Set a configuration value on the server')
+  .argument('<key>', 'The config key to set')
+  .argument('<value>', 'The value to set')
+  .action(async (key, value) => {
+    try {
+      const res = await axios.post(`${SERVER_URL}/config`, { key, value });
+      console.log(`Config updated: ${key} = ${res.data[key]}`);
+      if (key.includes('interval')) {
+        console.log('Note: Interval changes may require a server restart to take effect.');
+      }
+    } catch (err) {
+      console.error('Error setting config:', err.response ? err.response.data : err.message);
+    }
+  });
+  
 program.parse(process.argv);

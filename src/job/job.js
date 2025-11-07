@@ -1,11 +1,12 @@
-// src/job/job.js
 import { v4 as uuidv4 } from 'uuid';
-// No database imports needed!
 
 /**
  * Enqueues a job into the provided in-memory DB instance.
+ * @param {object} jobData
+ * @param {import('sql.js').Database} db
+ * @param {object} config - The loaded server configuration
  */
-export async function enqueueJob(jobData, db) {
+export async function enqueueJob(jobData, db, config) {
   try {
     const id = jobData.id || uuidv4();
     const now = Date.now();
@@ -15,7 +16,8 @@ export async function enqueueJob(jobData, db) {
       command: jobData.command,
       state: 'pending',
       attempts: 0,
-      max_retries: jobData.max_retries,
+      // Use provided retries, or fall back to server config default
+      max_retries: jobData.max_retries ?? parseInt(config.max_retries, 10),
       run_after: jobData.run_after || 0,
       created_at: now,
       updated_at: now,

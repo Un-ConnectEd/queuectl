@@ -1,10 +1,4 @@
 import { spawn } from 'child_process';
-import { parse } from 'shell-quote';
-
-function parseCommand(commandStr) {
-  const [command, ...args] = parse(commandStr);
-  return { command, args };
-}
 
 process.on('message', (job) => {
   if (!job || !job.command) {
@@ -30,10 +24,7 @@ process.on('message', (job) => {
   };
 
   try {
-    const { command, args } = parseCommand(job.command);
-    
-    //allows shell comands but will be passed through shell-parser to detect and eliminate shell injection
-    const child = spawn(command, args, { shell: true });
+    const child = spawn(job.command, [], { shell: true });
 
 
     child.stdout.on('data', (data) => {
@@ -52,17 +43,14 @@ process.on('message', (job) => {
       } else if (code !== 0) {
         sendFailure(stderr || `Process exited with code ${code}`);
       }
-      // if hasFailed is true, the 'error' handler already sent the message
     });
 
     child.on('error', (err) => {
-      // This fires for spawn errors like ENOENT
       sendFailure(`Failed to spawn: ${err.message}`);
     });
 
   } catch (err) {
-    // This catches shell-quote.parse errors for security(shell-quote)
-    sendFailure(`Unparseable command: ${err.message}`);
+    sendFailure(`Internal worker error: ${err.message}`);
   }
 });
 
