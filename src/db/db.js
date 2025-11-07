@@ -1,4 +1,3 @@
-// src/db/db.js
 import initSqlJs from 'sql.js';
 import fs from 'fs';
 import path from 'path';
@@ -9,11 +8,12 @@ const dbDir = path.join(__dirname, '../../db');
 
 if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
-  console.log('DEbug:db.js: Created DB folder at', dbDir);
+  console.log('🗂 Created DB folder at', dbDir);
 }
 
 const DB_FILE = path.join(dbDir, 'queue.db');
-console.log('Debug:db.js: DB file path:', DB_FILE);
+const TEMP_DB_FILE = path.join(dbDir, 'queue.db.tmp'); // For atomic saves
+console.log('📦 DB file path:', DB_FILE);
 
 let dbPromise = null;
 
@@ -22,18 +22,14 @@ function getDb() {
     return dbPromise;
   }
 
-  // Create a new promise for initialization
+  // create the promise that will load/init the DB if not exists.
   dbPromise = (async () => {
     try {
-      console.log('Initializing SQL.js module...');
       const SQL = await initSqlJs();
       let db;
 
-      /**
-       * continue the old database by loading it to preserve persistent
-       */
       if (fs.existsSync(DB_FILE)) {
-        console.log('Loading existing DB from file...');
+        console.log('Loading existing DB from file into memory...');
         const fileBuffer = fs.readFileSync(DB_FILE);
         db = new SQL.Database(fileBuffer);
       } else {
@@ -63,10 +59,10 @@ function getDb() {
         saveDb(db);
       }
       
-      console.log('DEbug:db.js:  DB initialized');
-      return db;
+      console.log('Database initialized and loaded into memory.');
+      return db; // This 'db' object is now the singleton
     } catch (err) {
-      console.error('ERROR: Debug:db.js: Failed to initialize DB:', err);
+      console.error('ERROR: Failed to initialize DB:', err);
       process.exit(1);
     }
   })();
@@ -75,27 +71,35 @@ function getDb() {
 }
 
 /**
-since sql.js is in memory sqlite alternative we need to save the changes before exiting the programm
-**/
-function saveDb(db) {
+ * Atomically saves the DB by writing to a temp file
+ * and then renaming it.
+ */
+export function saveDb(db) {
   if (!db) return;
-  console.log('Saving DB to file...');
+  console.log('Saving DB to file (atomic)...');
   const data = db.export();
-  fs.writeFileSync(DB_FILE, Buffer.from(data));
+  try {
+    fs.writeFileSync(TEMP_DB_FILE, Buffer.from(data));
+    fs.renameSync(TEMP_DB_FILE, DB_FILE);
+    console.log('Database save complete.');
+  } catch (err) {
+    console.error('FATAL: Failed to save DB atomically!', err);
+  }
 }
 
+/**
+ * This function ALWAYS returns the singleton promise.
+ */
 export async function getDbInstance() {
   return getDb();
 }
 
 /**
-  Saves and closes the database connection to remain persistant
- **/
-export async function closeAndSaveDb() {
-  if (dbPromise) {
-    const db = await dbPromise;
-    saveDb(db);
-    db.close();
-    dbPromise = null;
-  }
+ * This function is ONLY for the CLI client.
+ * The server should NEVER call this.
+ */
+export async function closeAndSaveDb(db) {
+  // This function is a no-op in the new model,
+  // but we leave it so the old CLI doesn't break,
+  // even though the CLI shouldn't be using it.
 }

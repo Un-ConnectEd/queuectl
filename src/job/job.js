@@ -1,11 +1,12 @@
-
-
-import { getDbInstance } from '../db/db.js';
+// src/job/job.js
 import { v4 as uuidv4 } from 'uuid';
+// No database imports needed!
 
-export async function enqueueJob(jobData) {
+/**
+ * Enqueues a job into the provided in-memory DB instance.
+ */
+export async function enqueueJob(jobData, db) {
   try {
-    const db = await getDbInstance();
     const id = jobData.id || uuidv4();
     const now = Date.now();
 
@@ -20,7 +21,6 @@ export async function enqueueJob(jobData) {
       updated_at: now,
     };
 
-    // sql.js uses $name for bindings
     const stmt = db.prepare(`
       INSERT INTO jobs (id, command, state, attempts, max_retries, run_after, created_at, updated_at)
       VALUES ($id, $command, $state, $attempts, $max_retries, $run_after, $created_at, $updated_at)
@@ -36,24 +36,19 @@ export async function enqueueJob(jobData) {
       $created_at: job.created_at,
       $updated_at: job.updated_at,
     });
-
     stmt.free();
-
-    console.log('DEbug: job.js: Enqueued job:', job.id);
     return job;
-
   } catch (err) {
-    console.error('DEbug: job.js/ db.js: Failed to enqueue job:', err);
+    console.error('Failed to enqueue job:', err);
+    throw err; // Re-throw to be caught by the server
   }
 }
 
 /**
- * Get jobs by state (e.g. pending, completed, failed)
+ * Gets jobs from the provided in-memory DB instance.
  */
-export async function getJobs(state) {
-  const db = await getDbInstance();
+export async function getJobs(state, db) {
   let stmt;
-  
   try {
     if (state) {
       stmt = db.prepare("SELECT * FROM jobs WHERE state = ? ORDER BY created_at DESC");
@@ -62,19 +57,15 @@ export async function getJobs(state) {
       stmt = db.prepare("SELECT * FROM jobs ORDER BY created_at DESC");
     }
 
-    // Loop over results rows
     const rows = [];
     while (stmt.step()) { 
       rows.push(stmt.getAsObject());
     }
-    
     stmt.free();
     return rows;
-    
   } catch (err) {
-    console.error('Debug:job.js:  Failed to get jobs:', err);
-    // free the db state even on error.
+    console.error('Failed to get jobs:', err);
     if (stmt) stmt.free();
-    return [];
+    throw err; // Re-throw
   }
 }

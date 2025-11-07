@@ -1,11 +1,12 @@
-#!/usr/bin/env node
 import { Command } from 'commander';
-import { enqueueJob as enqueue, getJobs as listJobs } from '../src/job/job.js';
-import { closeAndSaveDb } from '../src/db/db.js';
+import axios from 'axios'; // Use axios to send HTTP requests
 
+// Server port
+//TODO: have to change into .env variables in the future
+const SERVER_URL = 'http://localhost:3000'; 
 const program = new Command();
+
 console.log('queuectl CLI starting...');
-console.log('Node version:', process.version);
 
 program
   .name('queuectl')
@@ -13,7 +14,7 @@ program
   .version('1.0.0');
 
 //
-// ENQUEUE
+// ENQUEUE (Now an HTTP client)
 //
 program
   .command('enqueue')
@@ -21,43 +22,76 @@ program
   .argument('<command>', 'The command string to run')
   .option('-r, --retries <number>', 'Number of retries', 3)
   .action(async (commandStr, opts) => {
-    console.log('Building job...');
+    console.log('Sending job to worker server...');
     try {
       const jobData = {
         command: commandStr,
-        max_retries: parseInt(opts.retries, 10)
+        max_retries: parseInt(opts.retries, 10),
       };
-      console.log('Job data:', jobData);
-      const result = await enqueue(jobData);
-      console.log(' Job added:', result.id);
+      
+      const res = await axios.post(`${SERVER_URL}/enqueue`, jobData);
+      console.log('Job enqueued:', res.data.id);
     } catch (err) {
-      console.error('Debug: db.js: DB error:', err);
+      if (err.response) {
+        console.error('Error from server:', err.response.data);
+      } else if (err.code === 'ECONNREFUSED') {
+        console.error('Error: Could not connect to worker server.');
+        console.log('Please ensure the worker is running: `node ./bin/queuectl.js worker start`');
+      } else {
+        console.error('Error enqueuing job:', err.message);
+      }
     }
   });
 
 //
-// LIST JOBS
+// LIST JOBS (Now an HTTP client)
 //
 program
   .command('list')
   .description('List jobs by state')
-  .option('--state <state>', 'Job state filter (pending, processing, completed, failed, dead)')
+  .option(
+    '--state <state>',
+    'Job state filter (pending, processing, completed, failed, dead)',
+  )
   .action(async (opts) => {
-    const jobs = await listJobs(opts.state);
-    if (jobs && jobs.length > 0) {
-      console.table(jobs);
-    } else {
-      console.log('Empty DB or not enqueued: check db.js/ No jobs found.');
+    try {
+      const res = await axios.get(`${SERVER_URL}/list`, { params: opts });
+      const jobs = res.data;
+      
+      if (jobs && jobs.length > 0) {
+        console.table(jobs);
+      } else {
+        console.log('No jobs found.');
+      }
+    } catch (err) {
+      if (err.response) {
+        console.error('Error from server:', err.response.data);
+      } else if (err.code === 'ECONNREFUSED') {
+        console.error('Error: Could not connect to worker server.');
+        console.log('Please ensure the worker is running: `node ./bin/queuectl.js worker start`');
+      } else {
+        console.error('Error listing jobs:', err.message);
+      }
     }
   });
 
 //
-// WORKERS
+// WORKERS (This is the one command that imports the server)
 //
+const worker = program.command('worker').description('Manage workers');
 
-// This hook forces the DB to save
-program.hook('postAction', async () => {
-  await closeAndSaveDb();
-});
+worker
+  .command('start')
+  .description('Start the worker server')
+  .option('-c, --count <number>', 'Number of worker processes', 3)
+  .action(async (opts) => {
+    const count = parseInt(opts.count, 10);
+    console.log(`Starting worker server with ${count} worker(s)...`);
+    
+    // Dynamically import the server code
+    //TODO: have to be careful maybe a potential security risk
+    const { startWorkers } = await import('../src/worker/worker.js');
+    await startWorkers(count); // This function will now run forever starts the server.
+  });
 
 program.parse(process.argv);

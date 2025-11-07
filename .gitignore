@@ -139,5 +139,12 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
 
-#ignore the local DB
+# Ignore local database files
 *.db
+*.sqlite
+*.sqlite3
+*.db3
+*.sql-journal
+*.db-wal
+*.db-shm
+!example.db
